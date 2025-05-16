@@ -267,7 +267,7 @@ export function Canvas() {
     })
 
     // Add animation time for animated effects
-    const animatedEffects = ["fragments"]
+    const animatedEffects = ["fragments", "noise"]
     if (animatedEffects.includes(currentEffect)) {
       paramValues.push(animationTime)
     }

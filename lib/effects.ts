@@ -1,4 +1,4 @@
-export type EffectType = "pixelate" | "dither" | "halftone" | "glass" | "fragments" | "mirror"
+export type EffectType = "pixelate" | "dither" | "halftone" | "glass" | "fragments" | "mirror" | "noise"
 
 interface EffectParam {
   name: string
@@ -18,6 +18,484 @@ interface Effect {
 }
 
 export const effects: Record<EffectType, Effect> = {
+  noise: {
+    name: "Noise",
+    description: "Apply various noise patterns with creative post-processing",
+    params: {
+      noiseType: {
+        name: "Noise Type",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 1,
+        default: 0,
+      },
+      scale: {
+        name: "Scale",
+        type: "number",
+        min: 1,
+        max: 100,
+        step: 1,
+        default: 20,
+      },
+      amount: {
+        name: "Amount",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.5,
+        decimals: 2,
+      },
+      rotation: {
+        name: "Rotation",
+        type: "number",
+        min: 0,
+        max: 360,
+        step: 1,
+        default: 0,
+      },
+      octaves: {
+        name: "Octaves",
+        type: "number",
+        min: 1,
+        max: 8,
+        step: 1,
+        default: 3,
+      },
+      colorMode: {
+        name: "Color Mode",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 1,
+        default: 0,
+      },
+      contrast: {
+        name: "Contrast",
+        type: "number",
+        min: 0,
+        max: 2,
+        step: 0.01,
+        default: 1.0,
+        decimals: 2,
+      },
+      blendMode: {
+        name: "Blend Mode",
+        type: "number",
+        min: 0,
+        max: 4,
+        step: 1,
+        default: 0,
+      },
+      invert: {
+        name: "Invert",
+        type: "boolean",
+        default: false,
+      },
+    },
+    shaderCode: `
+      struct Uniforms {
+        textureSize: vec2f,
+        noiseType: f32,
+        scale: f32,
+        amount: f32,
+        rotation: f32,
+        octaves: f32,
+        colorMode: f32,
+        contrast: f32,
+        blendMode: f32,
+        invert: f32,
+      }
+      
+      @group(0) @binding(0) var texSampler: sampler;
+      @group(0) @binding(1) var inputTexture: texture_2d<f32>;
+      @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+      
+      // Constants
+      const PI = 3.14159265359;
+      
+      // Hash function for noise
+      fn hash(p: f32) -> f32 {
+        return fract(sin(p * 591.32) * 43758.5453);
+      }
+      
+      // 2D hash
+      fn hash2(p: vec2f) -> f32 {
+        return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+      }
+      
+      // Random noise (white noise)
+      fn randomNoise(p: vec2f) -> f32 {
+        return hash2(p);
+      }
+      
+      // Perlin noise
+      fn perlinNoise(p: vec2f) -> f32 {
+        let i = floor(p);
+        let f = fract(p);
+        
+        // Cubic interpolation
+        let u = f * f * (3.0 - 2.0 * f);
+        
+        // Four corners
+        let a = hash2(i);
+        let b = hash2(i + vec2f(1.0, 0.0));
+        let c = hash2(i + vec2f(0.0, 1.0));
+        let d = hash2(i + vec2f(1.0, 1.0));
+        
+        // Mix
+        return mix(
+          mix(a, b, u.x),
+          mix(c, d, u.x),
+          u.y
+        );
+      }
+      
+      // Warped noise using domain distortion
+      fn warpNoise(p: vec2f) -> f32 {
+        // Use perlin noise to distort the domain
+        let distortion = vec2f(
+          perlinNoise(p * 1.7),
+          perlinNoise(p * 1.7 + vec2f(43.13, 17.21))
+        );
+        
+        // Apply the distortion to the coordinates
+        let warpedCoords = p + distortion * 0.2;
+        
+        // Sample perlin noise with the warped coordinates
+        return perlinNoise(warpedCoords);
+      }
+      
+      // Voronoi (cellular) noise
+      fn voronoiNoise(p: vec2f) -> f32 {
+        let n = floor(p);
+        let f = fract(p);
+        
+        var minDist = 1.0;
+        
+        // Check 3x3 neighborhood
+        for (var j = -1; j <= 1; j++) {
+          for (var i = -1; i <= 1; i++) {
+            let neighbor = vec2f(f32(i), f32(j));
+            let point = neighbor + vec2f(hash2(n + neighbor), hash2(n + neighbor + vec2f(31.17, 57.3)));
+            let dist = length(point - f);
+            
+            minDist = min(minDist, dist);
+          }
+        }
+        
+        return minDist;
+      }
+      
+      // Cellular noise - different from Voronoi
+      fn cellularNoise(p: vec2f) -> f32 {
+        let n = floor(p);
+        let f = fract(p);
+        
+        var minDist = 1.0;
+        var secondMinDist = 1.0;
+        
+        // Check 3x3 neighborhood
+        for (var j = -1; j <= 1; j++) {
+          for (var i = -1; i <= 1; i++) {
+            let neighbor = vec2f(f32(i), f32(j));
+            let point = neighbor + vec2f(hash2(n + neighbor), hash2(n + neighbor + vec2f(31.17, 57.3)));
+            let dist = length(point - f);
+            
+            if (dist < minDist) {
+              secondMinDist = minDist;
+              minDist = dist;
+            } else if (dist < secondMinDist) {
+              secondMinDist = dist;
+            }
+          }
+        }
+        
+        // Return the difference between the two closest distances
+        // This creates cell borders
+        return secondMinDist - minDist;
+      }
+
+      // Simplex-like noise (improved Perlin)
+      fn simplexNoise(p: vec2f) -> f32 {
+        // Skew the input space to determine which simplex cell we're in
+        let F2 = 0.366025404; // 0.5*(sqrt(3.0)-1.0)
+        let G2 = 0.211324865; // (3.0-sqrt(3.0))/6.0
+        
+        // Skew
+        let s = (p.x + p.y) * F2;
+        let i = floor(p.x + s);
+        let j = floor(p.y + s);
+        
+        // Unskew
+        let t = (i + j) * G2;
+        let X0 = i - t;
+        let Y0 = j - t;
+        let x0 = p.x - X0;
+        let y0 = p.y - Y0;
+        
+        // Determine which simplex we're in
+        // Use var instead of let for variables that will be modified
+        var i1 = 0.0;  // Changed to f32
+        var j1 = 0.0;  // Changed to f32
+        
+        if (x0 > y0) {
+          i1 = 1.0;  // Changed to f32
+          j1 = 0.0;  // Changed to f32
+        } else {
+          i1 = 0.0;  // Changed to f32
+          j1 = 1.0;  // Changed to f32
+        }
+        
+        // Offsets for corners
+        let x1 = x0 - i1 + G2;
+        let y1 = y0 - j1 + G2;
+        let x2 = x0 - 1.0 + 2.0 * G2;
+        let y2 = y0 - 1.0 + 2.0 * G2;
+        
+        // Calculate contribution from the three corners
+        let t0 = 0.5 - x0*x0 - y0*y0;
+        var n0 = 0.0;
+        if (t0 > 0.0) {
+          let g0 = vec2f(
+            hash2(vec2f(i, j)) * 2.0 - 1.0,
+            hash2(vec2f(i, j) + vec2f(31.17, 57.3)) * 2.0 - 1.0
+          );
+          n0 = t0 * t0 * t0 * t0 * dot(g0, vec2f(x0, y0));
+        }
+        
+        let t1 = 0.5 - x1*x1 - y1*y1;
+        var n1 = 0.0;
+        if (t1 > 0.0) {
+          let g1 = vec2f(
+            hash2(vec2f(i + i1, j + j1)) * 2.0 - 1.0,
+            hash2(vec2f(i + i1, j + j1) + vec2f(31.17, 57.3)) * 2.0 - 1.0
+          );
+          n1 = t1 * t1 * t1 * t1 * dot(g1, vec2f(x1, y1));
+        }
+        
+        let t2 = 0.5 - x2*x2 - y2*y2;
+        var n2 = 0.0;
+        if (t2 > 0.0) {
+          let g2 = vec2f(
+            hash2(vec2f(i + 1.0, j + 1.0)) * 2.0 - 1.0,
+            hash2(vec2f(i + 1.0, j + 1.0) + vec2f(31.17, 57.3)) * 2.0 - 1.0
+          );
+          n2 = t2 * t2 * t2 * t2 * dot(g2, vec2f(x2, y2));
+        }
+        
+        // Scale to [0,1]
+        return 0.5 + 35.0 * (n0 + n1 + n2);
+      }
+      
+      // Fractal Brownian Motion (FBM)
+      fn fbm(p: vec2f, octaves: i32, noiseType: f32) -> f32 {
+        var value = 0.0;
+        var amplitude = 0.5;
+        var frequency = 1.0;
+        var total_amplitude = 0.0;
+        
+        for (var i = 0; i < 8; i++) {
+          if (i >= octaves) {
+            break;
+          }
+          
+          var noiseValue = 0.0;
+          
+          // Select noise type
+          if (noiseType < 0.5) {
+            // Random noise
+            noiseValue = randomNoise(p * frequency);
+          } else if (noiseType < 1.5) {
+            // Perlin noise
+            noiseValue = perlinNoise(p * frequency);
+          } else if (noiseType < 2.5) {
+            // Warp noise
+            noiseValue = warpNoise(p * frequency);
+          } else if (noiseType < 3.5) {
+            // Voronoi noise
+            noiseValue = voronoiNoise(p * frequency);
+          } else if (noiseType < 4.5) {
+            // Cellular noise
+            noiseValue = cellularNoise(p * frequency);
+          } else {
+            // Simplex noise
+            noiseValue = simplexNoise(p * frequency);
+          }
+          
+          value += amplitude * noiseValue;
+          total_amplitude += amplitude;
+          amplitude *= 0.5;
+          frequency *= 2.0;
+        }
+        
+        return value / total_amplitude;
+      }
+      
+      // Rotate a 2D point around the origin
+      fn rotate2D(p: vec2f, angle: f32) -> vec2f {
+        let s = sin(angle);
+        let c = cos(angle);
+        return vec2f(
+          p.x * c - p.y * s,
+          p.x * s + p.y * c
+        );
+      }
+      
+      // Apply color mapping to noise value
+      fn applyColorMapping(noiseValue: f32, colorMode: f32) -> vec3f {
+        if (colorMode < 0.5) {
+          // Grayscale
+          return vec3f(noiseValue);
+        } else if (colorMode < 1.5) {
+          // Heat map (black -> red -> yellow -> white)
+          return vec3f(
+            smoothstep(0.0, 0.7, noiseValue),
+            smoothstep(0.2, 0.8, noiseValue),
+            smoothstep(0.7, 1.0, noiseValue)
+          );
+        } else if (colorMode < 2.5) {
+          // Rainbow
+          return vec3f(
+            0.5 + 0.5 * sin(noiseValue * 6.28318 + 0.0),
+            0.5 + 0.5 * sin(noiseValue * 6.28318 + 2.0944),
+            0.5 + 0.5 * sin(noiseValue * 6.28318 + 4.18879)
+          );
+        } else if (colorMode < 3.5) {
+          // Cyberpunk (purple to cyan)
+          return mix(
+            vec3f(0.8, 0.1, 0.8),  // Purple
+            vec3f(0.0, 0.8, 0.8),  // Cyan
+            noiseValue
+          );
+        } else if (colorMode < 4.5) {
+          // Neon (vibrant blues and pinks)
+          return mix(
+            vec3f(0.0, 0.8, 1.0),  // Bright blue
+            vec3f(1.0, 0.2, 0.8),  // Hot pink
+            sin(noiseValue * 3.14159) * 0.5 + 0.5
+          );
+        } else {
+          // Earth tones (browns, greens, blues)
+          // Changed from 'let' to 'var' to make it mutable
+          var earth = mix(
+            vec3f(0.6, 0.4, 0.2),  // Brown
+            vec3f(0.2, 0.5, 0.2),  // Green
+            noiseValue
+          );
+          
+          // Add blue for water in low areas
+          if (noiseValue < 0.3) {
+            earth = mix(
+              vec3f(0.1, 0.3, 0.6),  // Deep blue
+              earth,
+              noiseValue / 0.3
+            );
+          }
+          
+          return earth;
+        }
+      }
+      
+      // Apply blend mode between original and noise
+      fn applyBlendMode(original: vec3f, noise: vec3f, blendMode: f32) -> vec3f {
+        if (blendMode < 0.5) {
+          // Normal blend
+          return noise;
+        } else if (blendMode < 1.5) {
+          // Multiply
+          return original * noise;
+        } else if (blendMode < 2.5) {
+          // Screen
+          return 1.0 - (1.0 - original) * (1.0 - noise);
+        } else if (blendMode < 3.5) {
+          // Overlay - implemented without ternary operators
+          var result: vec3f;
+          
+          // Red channel
+          if (original.r < 0.5) {
+            result.r = 2.0 * original.r * noise.r;
+          } else {
+            result.r = 1.0 - 2.0 * (1.0 - original.r) * (1.0 - noise.r);
+          }
+          
+          // Green channel
+          if (original.g < 0.5) {
+            result.g = 2.0 * original.g * noise.g;
+          } else {
+            result.g = 1.0 - 2.0 * (1.0 - original.g) * (1.0 - noise.g);
+          }
+          
+          // Blue channel
+          if (original.b < 0.5) {
+            result.b = 2.0 * original.b * noise.b;
+          } else {
+            result.b = 1.0 - 2.0 * (1.0 - original.b) * (1.0 - noise.b);
+          }
+          
+          return result;
+        } else {
+          // Add
+          return min(original + noise, vec3f(1.0));
+        }
+      }
+      
+      // Apply contrast adjustment
+      fn applyContrast(color: vec3f, contrast: f32) -> vec3f {
+        return 0.5 + (color - 0.5) * contrast;
+      }
+      
+      @fragment
+      fn fragmentMain(@location(0) texCoord: vec2f) -> @location(0) vec4f {
+        // Sample the original texture
+        let originalColor = textureSample(inputTexture, texSampler, texCoord);
+        
+        // Get parameters
+        let noiseType = uniforms.noiseType;
+        let scale = uniforms.scale / 100.0; // Convert to 0-1 range
+        let amount = uniforms.amount;
+        let rotationAngle = uniforms.rotation * PI / 180.0; // Convert to radians
+        let octaves = i32(uniforms.octaves);
+        let colorMode = uniforms.colorMode;
+        let contrast = uniforms.contrast;
+        let blendMode = uniforms.blendMode;
+        let invert = uniforms.invert > 0.5;
+        
+        // Center and normalize coordinates
+        let center = vec2f(0.5, 0.5);
+        let normalizedCoord = (texCoord - center) * 2.0;
+        
+        // Apply rotation
+        let rotatedCoord = rotate2D(normalizedCoord, rotationAngle);
+        
+        // Scale back to UV space
+        let scaledCoord = (rotatedCoord / 2.0 + center) * uniforms.textureSize * scale;
+        
+        // Generate noise
+        var noiseValue = fbm(scaledCoord, octaves, noiseType);
+        
+        // Apply inversion if needed
+        if (invert) {
+          noiseValue = 1.0 - noiseValue;
+        }
+        
+        // Apply color mapping
+        let noiseColor = applyColorMapping(noiseValue, colorMode);
+        
+        // Apply contrast
+        let contrastedNoise = applyContrast(noiseColor, contrast);
+        
+        // Apply blend mode
+        let blendedColor = applyBlendMode(originalColor.rgb, contrastedNoise, blendMode);
+        
+        // Mix with original based on amount
+        let finalColor = mix(originalColor.rgb, blendedColor, amount);
+        
+        return vec4f(finalColor, originalColor.a);
+      }
+    `,
+  },
   pixelate: {
     name: "Pixelate",
     description: "Pixelates the image by snapping UVs to a grid",
@@ -734,7 +1212,7 @@ export const effects: Record<EffectType, Effect> = {
       @group(0) @binding(2) var<uniform> uniforms: Uniforms;
       
       // Constants
-      const PI: f32 = 3.14159265359;
+      const PI = 3.14159265359;
       
       // Pattern 0: Radial stripes
       fn radialStripes(uv: vec2f, frequency: f32, amplitude: f32) -> vec2f {

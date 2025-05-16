@@ -8,6 +8,16 @@ import { effects } from "@/lib/effects"
 import { Card } from "@/components/ui/card"
 import { useState, useEffect } from "react"
 
+// Add import for the Select components at the top of the file:
+// Add this with the other imports at the top
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+// Add import for the noise preview components
+import {
+  NoisePatternPreview as ActualNoisePatternPreview,
+  NoiseColorModePreview as ActualNoiseColorModePreview,
+} from "./noise-previews"
+
 export function EffectControls() {
   const { currentEffect, effectParams, setEffectParams, updateEffectParam } = useStore()
   const [localParams, setLocalParams] = useState(effectParams)
@@ -138,17 +148,121 @@ export function EffectControls() {
     )
   }
 
+  // Add special handling for noise type selector
+  const renderNoiseTypeSelector = () => {
+    if (currentEffect !== "noise") return null
+
+    const noiseTypes = ["Random", "Perlin", "Warp", "Voronoi", "Cellular", "Simplex"]
+
+    const noiseValue = localParams.noiseType !== undefined ? Number(localParams.noiseType) : 0
+
+    return (
+      <div className="space-y-2 mb-4">
+        <div className="flex justify-between">
+          <Label>Noise Type</Label>
+        </div>
+        <div className="grid grid-cols-6 gap-1">
+          {noiseTypes.map((name, index) => (
+            <Card
+              key={index}
+              className={`p-1 cursor-pointer transition-all ${noiseValue === index ? "ring-2 ring-primary" : ""}`}
+              onClick={() => handleParamChange("noiseType", index)}
+              title={name}
+            >
+              <div className="w-full h-full flex items-center justify-center">
+                <ActualNoisePatternPreview type={index} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Add special handling for color mode selector in noise effect
+  const renderNoiseColorModeSelector = () => {
+    if (currentEffect !== "noise") return null
+
+    const colorModes = ["Grayscale", "Heat Map", "Rainbow", "Cyberpunk", "Neon", "Earth"]
+
+    const colorModeValue = localParams.colorMode !== undefined ? Number(localParams.colorMode) : 0
+
+    return (
+      <div className="space-y-2 mb-4">
+        <div className="flex justify-between">
+          <Label>Color Mode</Label>
+        </div>
+        <div className="grid grid-cols-6 gap-1">
+          {colorModes.map((name, index) => (
+            <Card
+              key={index}
+              className={`p-1 cursor-pointer transition-all ${colorModeValue === index ? "ring-2 ring-primary" : ""}`}
+              onClick={() => handleParamChange("colorMode", index)}
+              title={name}
+            >
+              <div className="w-full h-full flex items-center justify-center">
+                <ActualNoiseColorModePreview type={index} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Find the renderNoiseBlendModeSelector function and replace it with this implementation:
+
+  const renderNoiseBlendModeSelector = () => {
+    if (currentEffect !== "noise") return null
+
+    const blendModes = ["Normal", "Multiply", "Screen", "Overlay", "Add"]
+    const blendModeValue = localParams.blendMode !== undefined ? Number(localParams.blendMode) : 0
+
+    return (
+      <div className="space-y-2 mb-4">
+        <div className="flex justify-between">
+          <Label>Blend Mode</Label>
+        </div>
+        <Select
+          value={blendModeValue.toString()}
+          onValueChange={(value) => handleParamChange("blendMode", Number.parseInt(value))}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select blend mode" />
+          </SelectTrigger>
+          <SelectContent>
+            {blendModes.map((name, index) => (
+              <SelectItem key={index} value={index.toString()}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    )
+  }
+
+  // Add the new selectors to the return statement
   return (
     <div className="space-y-6">
       {renderFragmentsPatternSelector()}
       {renderMirrorPatternSelector()}
       {renderHalftoneShapeSelector()}
+      {renderNoiseTypeSelector()}
+      {renderNoiseColorModeSelector()}
+      {renderNoiseBlendModeSelector()}
 
       {Object.entries(effects[currentEffect].params).map(([key, param]) => {
         // Skip pattern type parameter as we're handling it separately
         if ((currentEffect === "fragments" || currentEffect === "mirror") && key === "patternType") return null
         // Skip shape type parameter as we're handling it separately
         if (currentEffect === "halftone" && key === "shapeType") return null
+        // Skip noise type parameter as we're handling it separately
+        if (currentEffect === "noise" && key === "noiseType") return null
+        // Skip color mode parameter as we're handling it separately
+        if (currentEffect === "noise" && key === "colorMode") return null
+        // Skip blend mode parameter as we're handling it separately
+        if (currentEffect === "noise" && key === "blendMode") return null
 
         const paramValue =
           localParams[key] !== undefined && localParams[key] !== null && !isNaN(Number(localParams[key]))
@@ -307,4 +421,13 @@ function MirrorPatternPreview({ type }: { type: number }) {
       </svg>
     </div>
   )
+}
+
+// Placeholder components for Noise effect previews
+function NoisePatternPreview({ type }: { type: number }) {
+  return <div className="w-full h-full bg-gray-500" />
+}
+
+function NoiseColorModePreview({ type }: { type: number }) {
+  return <div className="w-full h-full bg-gray-500" />
 }

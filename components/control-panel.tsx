@@ -9,7 +9,15 @@ import { ImageDropzone } from "./image-dropzone"
 import { EffectControls } from "./effect-controls"
 import { useStore } from "@/lib/store"
 import { effects, type EffectType } from "@/lib/effects"
-import { GridFour, DotsNine, DiamondsFour, DropHalfBottom, Sparkle, Hourglass } from "@phosphor-icons/react"
+import {
+  GridFour,
+  DotsNine,
+  DiamondsFour,
+  DropHalfBottom,
+  Sparkle,
+  Hourglass,
+  WaveSawtooth,
+} from "@phosphor-icons/react"
 
 export function ControlPanel() {
   const { currentEffect, setCurrentEffect, imageUrl, setImageUrl } = useStore()
@@ -39,6 +47,8 @@ export function ControlPanel() {
         return <Sparkle weight={weight} size={size} />
       case "pixelate":
         return <GridFour weight={weight} size={size} />
+      case "noise":
+        return <WaveSawtooth weight={weight} size={size} />
     }
   }
 
@@ -65,7 +75,7 @@ export function ControlPanel() {
           <div className="space-y-6">
             <div>
               <div className="flex flex-wrap gap-2">
-                {["halftone", "mirror", "glass", "dither", "fragments", "pixelate"].map((key) => (
+                {["halftone", "mirror", "glass", "dither", "fragments", "pixelate", "noise"].map((key) => (
                   <Button
                     key={key}
                     variant={currentEffect === (key as EffectType) ? "default" : "outline"}
@@ -79,7 +89,7 @@ export function ControlPanel() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-border">
+            <div className="pt-2 border-t border-border">
               <h2 className="text-lg font-medium mb-4">{effects[currentEffect].name}</h2>
               <EffectControls />
             </div>
