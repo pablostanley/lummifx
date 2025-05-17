@@ -17,6 +17,7 @@ import {
   Sparkle,
   Hourglass,
   WaveSawtooth,
+  Waves,
 } from "@phosphor-icons/react"
 
 export function ControlPanel() {
@@ -49,6 +50,8 @@ export function ControlPanel() {
         return <GridFour weight={weight} size={size} />
       case "noise":
         return <WaveSawtooth weight={weight} size={size} />
+      case "water":
+        return <Waves weight={weight} size={size} />
     }
   }
 
@@ -75,7 +78,7 @@ export function ControlPanel() {
           <div className="space-y-6">
             <div>
               <div className="flex flex-wrap gap-2">
-                {["halftone", "mirror", "glass", "dither", "fragments", "pixelate", "noise"].map((key) => (
+                {["halftone", "mirror", "glass", "dither", "fragments", "pixelate", "noise", "water"].map((key) => (
                   <Button
                     key={key}
                     variant={currentEffect === (key as EffectType) ? "default" : "outline"}

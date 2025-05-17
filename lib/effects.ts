@@ -1,4 +1,4 @@
-export type EffectType = "pixelate" | "dither" | "halftone" | "glass" | "fragments" | "mirror" | "noise"
+export type EffectType = "pixelate" | "dither" | "halftone" | "glass" | "fragments" | "mirror" | "noise" | "water"
 
 interface EffectParam {
   name: string
@@ -18,6 +18,378 @@ interface Effect {
 }
 
 export const effects: Record<EffectType, Effect> = {
+  water: {
+    name: "Water Waves",
+    description: "Simulates water ripples with reflections, refractions and caustics",
+    params: {
+      patternType: {
+        name: "Wave Pattern",
+        type: "number",
+        min: 0,
+        max: 3,
+        step: 1,
+        default: 0,
+      },
+      waveHeight: {
+        name: "Wave Height",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.3,
+        decimals: 2,
+      },
+      waveFrequency: {
+        name: "Wave Frequency",
+        type: "number",
+        min: 1,
+        max: 50,
+        step: 1,
+        default: 10,
+      },
+      waveSpeed: {
+        name: "Wave Speed",
+        type: "number",
+        min: 0,
+        max: 5,
+        step: 0.1,
+        default: 1.0,
+        decimals: 1,
+      },
+      refraction: {
+        name: "Refraction",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.5,
+        decimals: 2,
+      },
+      reflection: {
+        name: "Reflection",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.3,
+        decimals: 2,
+      },
+      caustics: {
+        name: "Caustics",
+        type: "number",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.5,
+        decimals: 2,
+      },
+      lightDirection: {
+        name: "Light Direction",
+        type: "number",
+        min: 0,
+        max: 360,
+        step: 1,
+        default: 45,
+      },
+      depth: {
+        name: "Water Depth",
+        type: "number",
+        min: 0.1,
+        max: 5,
+        step: 0.1,
+        default: 1.0,
+        decimals: 1,
+      },
+    },
+    shaderCode: `
+      struct Uniforms {
+        textureSize: vec2f,
+        patternType: f32,
+        waveHeight: f32,
+        waveFrequency: f32,
+        waveSpeed: f32,
+        refraction: f32,
+        reflection: f32,
+        caustics: f32,
+        lightDirection: f32,
+        depth: f32,
+        time: f32, // Automatically added for animation
+      }
+      
+      @group(0) @binding(0) var texSampler: sampler;
+      @group(0) @binding(1) var inputTexture: texture_2d<f32>;
+      @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+      
+      // Constants
+      const PI = 3.14159265359;
+      
+      // Hash function for noise
+      fn hash(p: f32) -> f32 {
+        return fract(sin(p * 591.32) * 43758.5453);
+      }
+      
+      // 2D hash
+      fn hash2(p: vec2f) -> f32 {
+        return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+      }
+      
+      // Noise function
+      fn noise(p: vec2f) -> f32 {
+        let i = floor(p);
+        let f = fract(p);
+        
+        // Cubic interpolation
+        let u = f * f * (3.0 - 2.0 * f);
+        
+        // Four corners
+        let a = hash2(i);
+        let b = hash2(i + vec2f(1.0, 0.0));
+        let c = hash2(i + vec2f(0.0, 1.0));
+        let d = hash2(i + vec2f(1.0, 1.0));
+        
+        // Mix
+        return mix(
+          mix(a, b, u.x),
+          mix(c, d, u.x),
+          u.y
+        );
+      }
+      
+      // FBM (Fractal Brownian Motion) for more natural looking waves
+      fn fbm(p: vec2f, octaves: i32) -> f32 {
+        var value = 0.0;
+        var amplitude = 0.5;
+        var frequency = 1.0;
+        var total_amplitude = 0.0;
+        
+        for (var i = 0; i < octaves; i++) {
+          value += amplitude * noise(p * frequency);
+          total_amplitude += amplitude;
+          amplitude *= 0.5;
+          frequency *= 2.0;
+        }
+        
+        return value / total_amplitude;
+      }
+      
+      // Pattern 0: Ripples - concentric circular waves
+      fn ripplePattern(uv: vec2f, time: f32, frequency: f32, speed: f32) -> f32 {
+        // Center coordinates
+        let center = vec2f(0.5, 0.5);
+        let dist = length(uv - center) * frequency;
+        
+        // Animate ripples moving outward
+        return sin(dist - time * speed) * 0.5 + 0.5;
+      }
+      
+      // Pattern 1: Ocean waves - directional waves with some randomness
+      fn oceanPattern(uv: vec2f, time: f32, frequency: f32, speed: f32) -> f32 {
+        // Base wave pattern
+        var height = sin(uv.x * frequency + time * speed) * 0.3;
+        height += sin(uv.x * frequency * 0.5 + uv.y * frequency * 0.7 + time * speed * 0.8) * 0.2;
+        
+        // Add some noise for realism
+        height += fbm(uv * vec2f(1.0, 2.0) + vec2f(time * 0.1, 0.0), 2) * 0.1;
+        
+        return height * 0.5 + 0.5;
+      }
+      
+      // Pattern 2: Choppy water - more complex wave interaction
+      fn choppyPattern(uv: vec2f, time: f32, frequency: f32, speed: f32) -> f32 {
+        // Multiple wave directions
+        var height = 0.0;
+        
+        // Wave 1
+        height += sin(uv.x * frequency * 1.1 + uv.y * frequency * 0.5 + time * speed) * 0.25;
+        
+        // Wave 2 (perpendicular direction)
+        height += sin(uv.y * frequency * 1.3 + uv.x * frequency * 0.7 + time * speed * 1.1) * 0.25;
+        
+        // Wave 3 (diagonal)
+        height += sin((uv.x + uv.y) * frequency * 0.9 + time * speed * 0.8) * 0.15;
+        
+        // Add noise for choppiness
+        height += (fbm(uv * 2.5 + vec2f(time * 0.2, time * 0.1), 3) - 0.5) * 0.2;
+        
+        return height * 0.5 + 0.5;
+      }
+      
+      // Pattern 3: Calm pool - subtle ripples with reflection
+      fn calmPoolPattern(uv: vec2f, time: f32, frequency: f32, speed: f32) -> f32 {
+        // Very subtle ripples
+        var height = 0.0;
+        
+        // Multiple small ripple sources
+        for (var i = 0; i < 5; i++) {
+          let rippleCenter = vec2f(
+            hash(f32(i) * 42.1) * 0.8 + 0.1,
+            hash(f32(i) * 17.9) * 0.8 + 0.1
+          );
+          
+          let dist = length(uv - rippleCenter) * frequency * 0.5;
+          let ripplePhase = time * speed * (0.5 + hash(f32(i)) * 0.5);
+          let rippleStrength = 0.02 + hash(f32(i) * 13.7) * 0.03;
+          
+          height += sin(dist * 10.0 - ripplePhase) * rippleStrength * smoothstep(1.0, 0.0, dist);
+        }
+        
+        // Add very subtle noise
+        height += (fbm(uv * 3.0 + vec2f(time * 0.05, 0.0), 2) - 0.5) * 0.02;
+        
+        return height * 0.5 + 0.5;
+      }
+      
+      // Calculate water height based on selected pattern
+      fn getWaterHeight(uv: vec2f, patternType: f32, time: f32, frequency: f32, speed: f32) -> f32 {
+        if (patternType < 0.5) {
+          return ripplePattern(uv, time, frequency, speed);
+        } else if (patternType < 1.5) {
+          return oceanPattern(uv, time, frequency, speed);
+        } else if (patternType < 2.5) {
+          return choppyPattern(uv, time, frequency, speed);
+        } else {
+          return calmPoolPattern(uv, time, frequency, speed);
+        }
+      }
+      
+      // Calculate water normal from height field
+      fn calculateWaterNormal(uv: vec2f, patternType: f32, time: f32, frequency: f32, speed: f32, height: f32) -> vec3f {
+        let eps = 0.01;
+        
+        // Sample height at neighboring points
+        let hL = getWaterHeight(uv + vec2f(-eps, 0.0), patternType, time, frequency, speed);
+        let hR = getWaterHeight(uv + vec2f(eps, 0.0), patternType, time, frequency, speed);
+        let hD = getWaterHeight(uv + vec2f(0.0, -eps), patternType, time, frequency, speed);
+        let hU = getWaterHeight(uv + vec2f(0.0, eps), patternType, time, frequency, speed);
+        
+        // Calculate normal using central differences
+        let normal = normalize(vec3f(
+          (hL - hR) * 2.0,
+          (hD - hU) * 2.0,
+          0.15 // Controls the "flatness" of the water
+        ));
+        
+        return normal;
+      }
+      
+      // Calculate caustics pattern
+      fn caustics(uv: vec2f, time: f32, waterHeight: f32) -> f32 {
+        // Caustics are focused light patterns created by water lensing
+        // We'll simulate this with a combination of noise and the water height
+        
+        let causticScale = 5.0;
+        let causticSpeed = 0.2;
+        
+        // Distort the UV based on water height
+        let distortedUV = uv + waterHeight * 0.1;
+        
+        // Create caustic pattern with multiple layers of noise
+        var causticPattern = 0.0;
+        
+        // Layer 1
+        causticPattern += fbm(distortedUV * causticScale + vec2f(time * causticSpeed, 0.0), 2);
+        
+        // Layer 2 (different scale and direction)
+        causticPattern += fbm(distortedUV * causticScale * 1.5 + vec2f(0.0, time * causticSpeed * 0.7), 2) * 0.5;
+        
+        // Create bright spots where caustic patterns converge
+        causticPattern = pow(causticPattern, 2.0);
+        
+        return causticPattern;
+      }
+      
+      // Rotate a 2D point around the origin
+      fn rotate2D(p: vec2f, angle: f32) -> vec2f {
+        let s = sin(angle);
+        let c = cos(angle);
+        return vec2f(
+          p.x * c - p.y * s,
+          p.x * s + p.y * c
+        );
+      }
+      
+      @fragment
+      fn fragmentMain(@location(0) texCoord: vec2f) -> @location(0) vec4f {
+        // Sample the original texture
+        let originalColor = textureSample(inputTexture, texSampler, texCoord);
+        
+        // Get parameters
+        let patternType = uniforms.patternType;
+        let waveHeight = uniforms.waveHeight;
+        let waveFrequency = uniforms.waveFrequency;
+        let waveSpeed = uniforms.waveSpeed;
+        let refraction = uniforms.refraction;
+        let reflection = uniforms.reflection;
+        let causticsIntensity = uniforms.caustics;
+        let lightAngle = uniforms.lightDirection * PI / 180.0;
+        let depth = uniforms.depth;
+        let time = uniforms.time;
+        
+        // Calculate water height at this point
+        let waterHeight = getWaterHeight(texCoord, patternType, time, waveFrequency, waveSpeed);
+        
+        // Scale the height by the wave height parameter
+        let scaledHeight = (waterHeight - 0.5) * waveHeight;
+        
+        // Calculate water surface normal
+        let waterNormal = calculateWaterNormal(texCoord, patternType, time, waveFrequency, waveSpeed, waterHeight);
+        
+        // Calculate light direction
+        let lightDir = normalize(vec3f(
+          cos(lightAngle),
+          sin(lightAngle),
+          1.0 // Light coming from above
+        ));
+        
+        // Calculate refraction (distortion of the image below water)
+        let refractionStrength = refraction * 0.1 * waveHeight;
+        let refractionOffset = waterNormal.xy * refractionStrength * depth;
+        let refractedUV = texCoord + refractionOffset;
+        
+        // Sample the refracted image
+        let refractedColor = textureSample(inputTexture, texSampler, refractedUV);
+        
+        // Calculate reflection (mirror-like reflection of the image)
+        let reflectionStrength = reflection * smoothstep(0.0, 0.5, 1.0 - abs(dot(vec3f(0.0, 0.0, 1.0), waterNormal)));
+        
+        // For reflection, we'll flip the image vertically and distort it
+        let reflectionUV = vec2f(texCoord.x, 1.0 - texCoord.y) + waterNormal.xy * 0.05;
+        let reflectedColor = textureSample(inputTexture, texSampler, reflectionUV);
+        
+        // Calculate caustics (light patterns created by water lensing)
+        let causticPattern = caustics(texCoord, time, waterHeight);
+        let causticColor = vec3f(1.0, 1.0, 0.9) * causticPattern * causticsIntensity;
+        
+        // Calculate Fresnel effect (more reflection at glancing angles)
+        let viewDir = vec3f(0.0, 0.0, 1.0); // Looking straight down at the water
+        let fresnel = pow(1.0 - abs(dot(viewDir, waterNormal)), 3.0);
+        
+        // Calculate specular highlight
+        let halfDir = normalize(lightDir + viewDir);
+        let specular = pow(max(0.0, dot(waterNormal, halfDir)), 64.0) * 0.5;
+        
+        // Combine everything
+        // Start with the refracted color (what's below the water)
+        var finalColor = refractedColor.rgb;
+        
+        // Add caustics
+        finalColor += causticColor * depth;
+        
+        // Add reflection based on Fresnel effect
+        finalColor = mix(finalColor, reflectedColor.rgb, reflectionStrength * fresnel);
+        
+        // Add specular highlight
+        finalColor += vec3f(specular);
+        
+        // Apply a slight blue tint to simulate water color absorption
+        // Deeper water absorbs more red light
+        let waterColor = vec3f(0.2, 0.5, 0.7);
+        finalColor = mix(finalColor, waterColor, depth * 0.2);
+        
+        return vec4f(finalColor, originalColor.a);
+      }
+    `,
+  },
   noise: {
     name: "Noise",
     description: "Apply various noise patterns with creative post-processing",

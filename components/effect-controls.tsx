@@ -18,6 +18,9 @@ import {
   NoiseColorModePreview as ActualNoiseColorModePreview,
 } from "./noise-previews"
 
+// Add import for the water preview component
+import { WaterPatternPreview } from "./water-previews"
+
 export function EffectControls() {
   const { currentEffect, effectParams, setEffectParams, updateEffectParam } = useStore()
   const [localParams, setLocalParams] = useState(effectParams)
@@ -179,6 +182,37 @@ export function EffectControls() {
     )
   }
 
+  // Add special handling for water pattern type selector
+  const renderWaterPatternSelector = () => {
+    if (currentEffect !== "water") return null
+
+    const waterPatterns = ["Ripples", "Ocean Waves", "Choppy Water", "Calm Pool"]
+
+    const patternValue = localParams.patternType !== undefined ? Number(localParams.patternType) : 0
+
+    return (
+      <div className="space-y-2 mb-4">
+        <div className="flex justify-between">
+          <Label>Wave Pattern</Label>
+        </div>
+        <div className="grid grid-cols-4 gap-1">
+          {waterPatterns.map((name, index) => (
+            <Card
+              key={index}
+              className={`p-1 cursor-pointer transition-all ${patternValue === index ? "ring-2 ring-primary" : ""}`}
+              onClick={() => handleParamChange("patternType", index)}
+              title={name}
+            >
+              <div className="w-full h-full flex items-center justify-center">
+                <WaterPatternPreview type={index} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   // Add special handling for color mode selector in noise effect
   const renderNoiseColorModeSelector = () => {
     if (currentEffect !== "noise") return null
@@ -251,6 +285,7 @@ export function EffectControls() {
       {renderNoiseTypeSelector()}
       {renderNoiseColorModeSelector()}
       {renderNoiseBlendModeSelector()}
+      {renderWaterPatternSelector()}
 
       {Object.entries(effects[currentEffect].params).map(([key, param]) => {
         // Skip pattern type parameter as we're handling it separately
@@ -263,6 +298,8 @@ export function EffectControls() {
         if (currentEffect === "noise" && key === "colorMode") return null
         // Skip blend mode parameter as we're handling it separately
         if (currentEffect === "noise" && key === "blendMode") return null
+        // Skip water pattern type parameter as we're handling it separately
+        if (currentEffect === "water" && key === "patternType") return null
 
         const paramValue =
           localParams[key] !== undefined && localParams[key] !== null && !isNaN(Number(localParams[key]))
@@ -431,3 +468,5 @@ function NoisePatternPreview({ type }: { type: number }) {
 function NoiseColorModePreview({ type }: { type: number }) {
   return <div className="w-full h-full bg-gray-500" />
 }
+
+// Placeholder component for Water effect previews
