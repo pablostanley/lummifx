@@ -32,7 +32,7 @@ export function ControlPanel() {
   const getEffectIcon = (effectKey: EffectType) => {
     const isActive = currentEffect === effectKey
     const weight = isActive ? "fill" : "regular"
-    const size = 28 // Increased size from 24 to 28
+    const size = 32
 
     switch (effectKey) {
       case "halftone":
@@ -80,7 +80,7 @@ export function ControlPanel() {
                     key={key}
                     variant={currentEffect === (key as EffectType) ? "default" : "outline"}
                     onClick={() => handleEffectChange(key as EffectType)}
-                    className="h-14 w-14 p-0 flex items-center justify-center"
+                    className="h-12 w-16 p-0 flex items-center justify-center"
                     title={effects[key as EffectType].name}
                   >
                     {getEffectIcon(key as EffectType)}
